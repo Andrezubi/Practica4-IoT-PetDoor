@@ -23,8 +23,7 @@ Mayo 2026
 # 1. Requerimientos Funcionales y No Funcionales
 ## Requerimientos Funcionales
 
-- El sistema debe permitir la lectura de tarjetas mediante un sensor RFID-RC522.
-
+- El sistema debe permitir la lectura de tarjetas mediante dos sensores RFID-RC522 uno de entrada y otro de salida. 
 - El sistema debe identificar y diferenciar cada tarjeta RFID registrada.
 - El sistema debe enviar el ID de la tarjeta leída hacia AWS IoT Core mediante MQTT.
 - El sistema debe actualizar el estado reportado del dispositivo en el Shadow de AWS IoT Core.
@@ -35,14 +34,15 @@ Mayo 2026
    - Automatizar la puerta (SedModeAuto)
    - Cambiar temporizador de puerta (SetAutoTimer)
    - Registrar un RFID autorizado (SetCurrentTag)
-   - Quitar un RFID registrado (RemoveCurrentTag)
+   - Quitar un RFID registrado (RemoveCurrentTag) 
+   -  Registar el ultimo Tag percibido (RegisterLastTagIntent)
     #### Comandos para recibir informacióm del sistema: 
    - Obtener estado del motor (GetMotorState) 
    - Obtener nombre del tag si esta presente (GetIfPresentTag) 
    - Obtener el tiempo de la ultima vez que se abrió la puerta (GetLastOpenTime) 
    - Obtener el ultimo tag registrado (GetLastTag) 
    - Obtener el estado de la puerta (GetDoorState)
-
+   - Conformar el registro del ultimo Tag (ConfirmTagRegistrationIntent)
 - El sistema debe controlar el servomotor MG90S en función de los comandos anteriormente mencionados. 
 - El sistema debe permitir el movimiento del servomotor cuando una tarjeta autorizada sea detectada.
 - El sistema debe negar el acceso cuando una tarjeta no autorizada sea detectada.
@@ -52,7 +52,8 @@ El sistema debe permitir que Alexa registre y mande las siguientes categorías:
    - Estado del motor: si está en movimiento o si está parado 
    - Información del sensor: si percibió algo, en qué momento percibió la mascota, que mascota percibió
    - nombre de la mascota
-
+- El sistema debe guardar datos en una Base de Datos (DynamoDB) cuando los sensores detecten un Tag.
+- El sistema debe guardar datos en DynamoDB las veces que se envio un comando de apertura, al Shadow del Objeto Inteligente.
 
 ## Requerimientos No Funcionales
 
@@ -75,20 +76,20 @@ El sistema debe permitir que Alexa registre y mande las siguientes categorías:
 ## 2.3 Diagramas estructurales y de comportamiento
 ### 2.3.1 Diagrama de secuencia
 ![Diagrama](Imagenes/Diagrama_de_secuencia.png)
-### 2.4 Diseño de la skill de Alexa 
-# Diseño de la Skill de Alexa
+### 2.3.2 Diagrama de secuencia
+![Diagrama](Imagenes/diagrama_uml.png)
 
-## Nombre de la Skill
+### 2.4 Diseño de la skill de Alexa 
+
+#### Nombre de la Skill
 
 **Smart_Pet_Door**
 
----
-
-## Invocation Name
+#### Invocation Name
 
 **Puerta Inteligente**
 
-## Tabla de Intents
+#### Tabla de Intents
 
 | Intent | Función | Slot | Ejemplo de comando |
 |----------|----------|----------|-------------------|
@@ -96,7 +97,9 @@ El sistema debe permitir que Alexa registre y mande las siguientes categorías:
 | SetModeAutoIntent | Activar modo automático | No tiene | "Activa modo automático" |
 | SetModeClosedIntent | Cerrar y bloquear la puerta | No tiene | "Cerrar la puerta" |
 | SetModeOpenIntent | Abrir la puerta | No tiene | "Abrir la puerta" |
-| AddNewTagIntent | Registrar una mascota nueva | `petName` | "Registrar mascota llamada Luna" |
+| AddNewTagIntent | Iniciar registro de una mascota | `petName` | "Registrar mascota llamada Luna" |
+| ConfirmTagRegistrationIntent | Confirmar registro después de acercar el tag | No tiene | "Confirmar registro" |
+| RegisterLastTagIntent | Registrar directamente el último tag detectado | `petName` | "Registrar último tag como Rocky" |
 | RemoveTagIntent | Eliminar una mascota | `petName` | "Eliminar mascota Luna" |
 | SetAutoTimerIntent | Configurar tiempo de apertura | `openTime` | "Timer de apertura 30 segundos" |
 | SetRegisterDurationIntent | Configurar duración de registro | `registerTime` | "Tiempo de registro 5 segundos" |
@@ -106,11 +109,9 @@ El sistema debe permitir que Alexa registre y mande las siguientes categorías:
 | GetLastOpenTimeIntent | Consultar última apertura | No tiene | "¿Cuándo se abrió la puerta?" |
 | GetListOfPetsIntent | Mostrar mascotas registradas | No tiene | "Listar mascotas" |
 
----
+#### Flujo de conversación
 
-## Flujo de conversación
-
-### Apertura de puerta
+##### Apertura de puerta
 
 ```text
 Usuario
@@ -134,7 +135,47 @@ Alexa responde:
 "La puerta fue abierta."
 ```
 
-### Registro de una mascota
+##### Registro de una mascota
+
+```text
+Usuario
+    ↓
+"Registrar mascota Oliver"
+
+Alexa Skill
+    ↓
+AddNewTagIntent
+    ↓
+AWS Lambda activa modo registro
+    ↓
+Actualización del Device Shadow
+    ↓
+ESP32 entra en modo registro
+    ↓
+Alexa responde:
+
+"Modo de registro activado.
+Acerca el tag y di confirmar registro"
+
+Usuario
+    ↓
+Acerca el RFID
+    ↓
+"Confirmar registro"
+
+Alexa Skill
+    ↓
+ConfirmTagRegistrationIntent
+    ↓
+Lee el último tag detectado
+    ↓
+Guarda información en DynamoDB
+    ↓
+Alexa responde:
+
+"Oliver fue registrado correctamente."
+```
+##### Registro de una mascota
 
 ```text
 Usuario
@@ -175,7 +216,6 @@ Alexa responde:
 
 #### 5. Tiempo promedio que la mascota permaneció fuera de casa
 ![Diagrama](Imagenes/mockup_5.png)
-
 
 ### 2.6 Diseño Modelo de Datos 
 ![Diagrama](Imagenes/diseño_modelo_datos.png)
