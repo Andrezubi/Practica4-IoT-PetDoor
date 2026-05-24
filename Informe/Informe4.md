@@ -69,17 +69,122 @@ El sistema debe permitir que Alexa registre y mande las siguientes categorías:
 # 2. Diseño del Sistema
 
 ## 2.1 Diagrama de circuito
-![Diagrama](Imagenes/diagrama_circuito.jpeg)
+![Diagrama](Imagenes/diagrama_circuito.png)
 ## 2.2 Diagrama de arquitectura del sistema
 ![Diagrama](Imagenes/Diagrama_de_arquitectura.png)
 ## 2.3 Diagramas estructurales y de comportamiento
 ### 2.3.1 Diagrama de secuencia
 ![Diagrama](Imagenes/Diagrama_de_secuencia.png)
+### 2.4 Diseño de la skill de Alexa 
+# Diseño de la Skill de Alexa
+
+## Nombre de la Skill
+
+**Smart_Pet_Door**
+
+---
+
+## Invocation Name
+
+**Puerta Inteligente**
+
+## Tabla de Intents
+
+| Intent | Función | Slot | Ejemplo de comando |
+|----------|----------|----------|-------------------|
+| ConnectToDoorIntent | Conectar una puerta según ubicación | `location` | "Conectar con la puerta de entrada" |
+| SetModeAutoIntent | Activar modo automático | No tiene | "Activa modo automático" |
+| SetModeClosedIntent | Cerrar y bloquear la puerta | No tiene | "Cerrar la puerta" |
+| SetModeOpenIntent | Abrir la puerta | No tiene | "Abrir la puerta" |
+| AddNewTagIntent | Registrar una mascota nueva | `petName` | "Registrar mascota llamada Luna" |
+| RemoveTagIntent | Eliminar una mascota | `petName` | "Eliminar mascota Luna" |
+| SetAutoTimerIntent | Configurar tiempo de apertura | `openTime` | "Timer de apertura 30 segundos" |
+| SetRegisterDurationIntent | Configurar duración de registro | `registerTime` | "Tiempo de registro 5 segundos" |
+| GetDoorStateIntent | Consultar estado de la puerta | No tiene | "¿La puerta está abierta?" |
+| GetMotorStateIntent | Consultar estado del motor | No tiene | "¿Cómo está el motor?" |
+| GetLastTagIntent | Consultar la última detección RFID | No tiene | "¿Cuál fue el último tag?" |
+| GetLastOpenTimeIntent | Consultar última apertura | No tiene | "¿Cuándo se abrió la puerta?" |
+| GetListOfPetsIntent | Mostrar mascotas registradas | No tiene | "Listar mascotas" |
+
+---
+
+## Flujo de conversación
+
+### Apertura de puerta
+
+```text
+Usuario
+    ↓
+"Abre la puerta"
+
+Alexa Skill
+    ↓
+SetModeOpenIntent
+    ↓
+AWS Lambda procesa la solicitud
+    ↓
+Actualización del Device Shadow en AWS IoT Core
+    ↓
+ESP32 recibe el comando
+    ↓
+Servo acciona la apertura
+    ↓
+Alexa responde:
+
+"La puerta fue abierta."
+```
+
+### Registro de una mascota
+
+```text
+Usuario
+    ↓
+"Registra a Oliver "
+
+Alexa Skill
+    ↓
+AddNewTagIntent
+    ↓
+AWS Lambda activa modo registro
+    ↓
+Actualización del Device Shadow
+    ↓
+ESP32 entra en modo registro
+    ↓
+RFID detecta etiqueta
+    ↓
+Información almacenada en DynamoDB
+    ↓
+Alexa responde:
+
+"Oliver fue registrado correctamente."
+```
+### 2.5 Diseño de reportes (mockups) con información relevante para la toma de decisiones
+
+#### 1. Tráfico de uso de la puerta por día de la semana y hora del día
+![Diagrama](Imagenes/mockup_1.png)
+
+#### 2. Distribución de uso de la puerta por mascota
+![Diagrama](Imagenes/mockup_2.png)
+
+#### 3. Última hora de entrada registrada por día para una mascota
+![Diagrama](Imagenes/mockup_3.png)
+
+#### 4. Primera hora de salida registrada por día para una mascota
+![Diagrama](Imagenes/mockup_4.png)
+
+#### 5. Tiempo promedio que la mascota permaneció fuera de casa
+![Diagrama](Imagenes/mockup_5.png)
+
+
+### 2.6 Diseño Modelo de Datos 
+![Diagrama](Imagenes/diseño_modelo_datos.png)
+
 # 3. Implementación
 
 ## 3.1 Código fuente documentado
 
-[Enlace a GitHub] https://github.com/Andrezubi/IoT-4to-Entregable
+[Enlace a GitHub] https://github.com/Andrezubi/Practica4-IoT-PetDoor
 
 # 4. Pruebas y Validaciones
 
@@ -94,9 +199,7 @@ A partir de los datos registrados se obtuvo:
 - Distancia promedio de detección: **3.68 cm**
 - Distancia mínima registrada: **3.2 cm**
 - Distancia máxima registrada: **6.5 cm**
-- Rango frecuente de funcionamiento: **3.3 cm a 3.7 cm**
-
-
+- Rango frecuente de funcionamiento: **3.3 cm a 3.7 cm** 
 
 ## 4.2 Prueba de interferencia según distintos materiales
 
@@ -126,8 +229,6 @@ Resultados obtenidos:
 
 Los resultados muestran que los materiales no metálicos afectan mínimamente el funcionamiento del sensor, mientras que el aluminio genera una interferencia total debido a las propiedades electromagnéticas del material.
 
-
-
 ## 4.3 Prueba de tiempo de respuesta del sensor
 
 Para evaluar el tiempo de respuesta del sensor RFID-RC522 se realizaron mediciones relacionadas con:
@@ -145,7 +246,6 @@ En cambio, sí se logró medir el tiempo de “olvido” del sensor, obteniéndo
 - Desviación estándar: **0.14 segundos**
 
 Estos resultados muestran que el sensor posee una detección rápida y estable, manteniendo temporalmente el último estado detectado antes de reiniciarse.
-
 
 ## 4.4 Prueba de lectura continua
 
@@ -205,7 +305,6 @@ Resultados obtenidos:
 - Desviación estándar: **0.063**
 
 Los resultados muestran una baja variación entre mediciones, indicando que el servomotor mantiene una posición estable y repetible.
-
 
 ## 4.8 Prueba de funcionamiento continuo del servomotor
 
