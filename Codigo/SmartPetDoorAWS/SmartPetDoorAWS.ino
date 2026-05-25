@@ -15,8 +15,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Network & AWS config
 // ─────────────────────────────────────────────────────────────────────────────
-const char* WIFI_SSID   = "Flia.zubieta_s";      
-const char* WIFI_PASS   = "Zubieta1234";         
+const char* WIFI_SSID   = "Nicole Vargas Prado";      
+const char* WIFI_PASS   = "OliverWhityGrumpy";         
 const char* MQTT_BROKER = "a2z78sujrz3n3i-ats.iot.us-east-1.amazonaws.com"; 
 const int   MQTT_PORT   = 8883;
 const char* CLIENT_ID   = "pet_door_esp32";
@@ -110,45 +110,50 @@ M7AVOAZ/uS9gG0C5NW2sszMQ3HBLTFAzNcc5ERc9gmA8PKoLoYiCRU/0KT6C8bbo
 // ─────────────────────────────────────────────────────────────────────────────
 // Pin definitions
 // ─────────────────────────────────────────────────────────────────────────────
-#define RFID_SS_PIN   5
-#define RFID_RST_PIN  4
-#define SERVO_PIN     13
-
+#define RFID_ENTRY_SS_PIN   5
+#define RFID_ENTRY_RST_PIN  4
+#define RFID_EXIT_SS_PIN    14
+#define RFID_EXIT_RST_PIN   15
+#define SERVO_PIN           13
+ 
 // ─────────────────────────────────────────────────────────────────────────────
-// Door angle constants — only the main knows what angles mean
+// Door angle constants
 // ─────────────────────────────────────────────────────────────────────────────
 #define DOOR_ANGLE_CLOSED  0
 #define DOOR_ANGLE_OPEN    90
-
+ 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hardware objects
 // ─────────────────────────────────────────────────────────────────────────────
-RFID         rfid(RFID_SS_PIN, RFID_RST_PIN);
-
-SmoothServo  servo(SERVO_PIN, DOOR_ANGLE_CLOSED, /*stepDeg=*/2, /*intervalMs=*/15);
-
+RFID rfidEntry(RFID_ENTRY_SS_PIN, RFID_ENTRY_RST_PIN, "entry");
+RFID rfidExit (RFID_EXIT_SS_PIN,  RFID_EXIT_RST_PIN,  "exit");
+ 
+SmoothServo servo(SERVO_PIN, DOOR_ANGLE_CLOSED, /*stepDeg=*/2, /*intervalMs=*/15);
+ 
 WiFiClientSecure wifiClient;
 PubSubClient     mqttClient(wifiClient);
-
+ 
 // ─────────────────────────────────────────────────────────────────────────────
 // Runtime state
 // ─────────────────────────────────────────────────────────────────────────────
-String        currentMode     = "auto";
-unsigned int  openDurationSec = 30;
-unsigned long openedAt        = 0;
-bool          autoCloseArmed  = false;
-bool          needsReport     = false;
-
-StaticJsonDocument<1024> petsDoc;
-
+String        currentMode          = "auto";
+unsigned int  openDurationSec      = 30;
+unsigned int  registerDurationSec  = 20;
+unsigned long openedAt             = 0;   //millis()when door opened
+unsigned long registerStartedAt    = 0;   // millis() when register mode began
+bool          autoCloseArmed       = false;
+bool          needsReport          = false;
+bool          registerMode         = false;
+String        pendingCommandId     = "";
+ 
 // ─────────────────────────────────────────────────────────────────────────────
-// Door helpers — the main interprets servo angles as door states
+// Door helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
+ 
 bool doorIsOpen()   { return servo.getCurrentAngle() >= DOOR_ANGLE_OPEN   && servo.isIdle(); }
 bool doorIsClosed() { return servo.getCurrentAngle() <= DOOR_ANGLE_CLOSED && servo.isIdle(); }
 bool doorIsMoving() { return servo.isMoving(); }
-
+ 
 const char* getDoorStateStr() {
   if (servo.isMoving())
     return (servo.getTargetAngle() >= DOOR_ANGLE_OPEN) ? "opening" : "closing";
@@ -156,11 +161,10 @@ const char* getDoorStateStr() {
   if (doorIsClosed()) return "closed";
   return "unknown";
 }
-
+ 
 const char* getMotorStateStr() {
   return servo.isMoving() ? "running" : "idle";
 }
-
 void commandOpen() {
 
   if (doorIsOpen()) {
@@ -185,24 +189,19 @@ void commandOpen() {
   needsReport = true;
 }
 
+ 
 void commandClose() {
-  if (doorIsClosed()) {
-    Serial.println("[DOOR] Already closed, ignoring.");
-    return;
-  }
+  if (doorIsClosed()) { Serial.println("[DOOR] Already closed."); return; }
   Serial.println("[DOOR] → CLOSE");
   servo.moveTo(DOOR_ANGLE_CLOSED);
   autoCloseArmed = false;
   needsReport    = true;
 }
-
+ 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-
-
-
+ 
 String getISOTimestamp() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) return "1970-01-01T00:00:00Z";
@@ -210,61 +209,57 @@ String getISOTimestamp() {
   strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
   return String(buf);
 }
-
-String findPetByTag(const String& uid) {
-  JsonArray pets = petsDoc["pets"].as<JsonArray>();
-  
-  Serial.print("[AUTH] Looking for tag: '");
-  Serial.print(uid);
-  Serial.print("' in pets array (count=");
-  Serial.print(pets.size());
-  Serial.println(")");
-  
-  for (JsonObject pet : pets) {
-    String petTag = pet["tag"].as<String>();
-    String petName = pet["name"].as<String>();
-    
-    Serial.print("[AUTH]   Comparing '");
-    Serial.print(uid);
-    Serial.print("' vs '");
-    Serial.print(petTag);
-    Serial.print("' → ");
-    
-    if (petTag == uid) {
-      Serial.println("MATCH!");
-      Serial.print("[AUTH] Matched → ");
-      Serial.println(petName);
-      return petName;
-    } else {
-      Serial.println("no match");
-    }
-  }
-  
-  Serial.print("[AUTH] Unknown tag: ");
-  Serial.println(uid);
-  return "";
+ 
+// Generates a UUID4 using the ESP32 hardware RNG
+String newEventId() {
+  uint32_t r[4];
+  for (int i = 0; i < 4; i++) r[i] = esp_random();
+  // Set version 4 (0100) and variant bits (10xx)
+  r[1] = (r[1] & 0xFFFF0FFF) | 0x00004000;  // version 4
+  r[2] = (r[2] & 0x3FFFFFFF) | 0x80000000;  // variant 10
+  char buf[37];
+  snprintf(buf, sizeof(buf),
+    "%08x-%04x-%04x-%04x-%04x%08x",
+    r[0],
+    (r[1] >> 16) & 0xFFFF,
+    r[1] & 0xFFFF,
+    (r[2] >> 16) & 0xFFFF,
+    r[2] & 0xFFFF,
+    r[3]
+  );
+  return String(buf);
 }
-
+ 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shadow publishing
 // ─────────────────────────────────────────────────────────────────────────────
-
-void publishReport(const String& lastTag = "", const String& lastPet = "") {
+ 
+// Publishes reported state. If tag/reader are provided, updates last_event too.
+void publishReport(const String& tag = "", const String& reader = "") {
   StaticJsonDocument<512> doc;
-  JsonObject reported = doc["state"]["reported"].to<JsonObject>();
-
-  reported["mode"]          = currentMode;
-  reported["door_state"]    = getDoorStateStr();
-  reported["motor_state"]   = getMotorStateStr();
-  reported["open_duration"] = openDurationSec;
-  reported["tag_present"]   = rfid.isTagPresent();
-
-  if (lastTag.length() > 0) {
-    reported["last_tag"]     = lastTag;
-    reported["last_pet"]     = lastPet;
-    reported["last_open_at"] = getISOTimestamp();
+  JsonObject state    = doc["state"].to<JsonObject>();
+  JsonObject reported = state["reported"].to<JsonObject>();
+ 
+  // reported.config
+  JsonObject config = reported["config"].to<JsonObject>();
+  config["mode"]                = currentMode;
+  config["open_duration_sec"]   = openDurationSec;
+  config["register_duration_sec"] = registerDurationSec;
+ 
+  // reported.door
+  JsonObject door = reported["door"].to<JsonObject>();
+  door["state"]      = getDoorStateStr();
+  door["motor_state"] = getMotorStateStr();
+ 
+  // reported.last_event — only update when a real tag read happened
+  if (tag.length() > 0 && reader.length() > 0) {
+    JsonObject lastEvent = reported["last_event"].to<JsonObject>();
+    lastEvent["reader"]      = reader;
+    lastEvent["tag"]         = tag;
+    lastEvent["detected_at"] = getISOTimestamp();
+    lastEvent["event_id"]    = newEventId();
   }
-
+ 
   char buffer[512];
   serializeJson(doc, buffer);
   Serial.print("[MQTT] Report → ");
@@ -272,85 +267,133 @@ void publishReport(const String& lastTag = "", const String& lastPet = "") {
   mqttClient.publish(TOPIC_UPDATE, buffer);
   needsReport = false;
 }
-
+ 
 // ─────────────────────────────────────────────────────────────────────────────
-// Delta handler
+// RFID event handler — called for both entry and exit readers
 // ─────────────────────────────────────────────────────────────────────────────
-
+ 
+void handleTagDetected(const String& uid, const String& reader) {
+  Serial.print("[AUTH][");
+  Serial.print(reader);
+  Serial.print("] Tag: ");
+  Serial.println(uid);
+ 
+  // ── Register mode: just report the tag so the shadow picks it up ──────────
+  if (registerMode) {
+    // Prefix reader with "register " so the Lambda can identify this as a
+    // registration event and skip the auth flow.
+    Serial.println("[REGISTER] Tag detected in register mode — reporting.");
+    publishReport(uid, "register " + reader);
+    needsReport = false;
+    return;
+  }
+ 
+  // Normal event — Lambda decides whether to open.
+  publishReport(uid, reader);
+  needsReport = false;
+}
+ 
+// ─────────────────────────────────────────────────────────────────────────────
+// Delta / shadow sync handler
+// ─────────────────────────────────────────────────────────────────────────────
+ 
 void applyDelta(JsonObject delta) {
   bool changed = false;
-
-  if (delta.containsKey("mode")) {
-
-    String newMode = delta["mode"].as<String>();
-
-    if(newMode != currentMode){
-
-      Serial.print("[DELTA] mode: ");
-      Serial.print(currentMode);
-      Serial.print(" → ");
-      Serial.println(newMode);
-
-      currentMode = newMode;
-      changed = true;
-    }
-
-    if (currentMode == "open") {
-
-      autoCloseArmed = false;
-      commandOpen();
-
-    }
-    else if (currentMode == "closed") {
-
-      autoCloseArmed = false;
-      commandClose();
-
-    }
-    else if (currentMode == "auto") {
-
-      // si la puerta ya está abierta,
-      // empezar timer automático
-      if (doorIsOpen()) {
-
+ 
+  // ── config block ──────────────────────────────────────────────────────────
+  if (delta.containsKey("config")) {
+    JsonObject cfg = delta["config"].as<JsonObject>();
+ 
+    if (cfg.containsKey("mode")) {
+      String newMode = cfg["mode"].as<String>();
+      if (newMode != currentMode) {
+        Serial.print("[DELTA] mode: ");
+        Serial.print(currentMode);
+        Serial.print(" → ");
+        Serial.println(newMode);
+        currentMode = newMode;
+        changed = true;
+      }
+ 
+      if (currentMode == "open") {
+        // mode=open: force door open and disable auto-close
+        autoCloseArmed = false;
+        commandOpen();
+      } else if (currentMode == "closed") {
+        // mode=closed: force door closed regardless of current position
+        // commandClose guard is bypassed here so we always attempt the move
+        autoCloseArmed = false;
+        Serial.println("[DOOR] -> CLOSE (mode=closed)");
+        servo.moveTo(DOOR_ANGLE_CLOSED);
+        needsReport = true;
+      } else if (currentMode == "auto" && doorIsOpen()) {
+        // mode=auto: if door is already open, rearm the auto-close timer
         openedAt = millis();
         autoCloseArmed = (openDurationSec > 0);
-
         Serial.println("[AUTO] Auto-close rearmed.");
       }
     }
-}
-
-  if (delta.containsKey("open_duration")) {
-    unsigned int newDuration= delta["open_duration"].as<unsigned int>();
-    if(newDuration!= openDurationSec){
-      openDurationSec = delta["open_duration"].as<unsigned int>();
-      Serial.print("[DELTA] open_duration → ");
-      Serial.println(openDurationSec);
-      changed = true;
-
+ 
+    if (cfg.containsKey("open_duration_sec")) {
+      unsigned int newDur = cfg["open_duration_sec"].as<unsigned int>();
+      if (newDur != openDurationSec) {
+        openDurationSec = newDur;
+        Serial.print("[DELTA] open_duration_sec → ");
+        Serial.println(openDurationSec);
+        changed = true;
+      }
     }
-    
+ 
+    if (cfg.containsKey("register_duration_sec")) {
+      unsigned int newRegDur = cfg["register_duration_sec"].as<unsigned int>();
+      if (newRegDur != registerDurationSec) {
+        registerDurationSec = newRegDur;
+        Serial.print("[DELTA] register_duration_sec → ");
+        Serial.println(registerDurationSec);
+        changed = true;
+      }
+    }
   }
-
-  if (delta.containsKey("pets")) {
-    petsDoc["pets"] = delta["pets"];
-    Serial.print("[DELTA] pets updated, count=");
-    Serial.println(delta["pets"].size());
+ 
+  // ── door_command block ────────────────────────────────────────────────────
+  if (delta.containsKey("door_command")) {
+    JsonObject cmd    = delta["door_command"].as<JsonObject>();
+    String     action = cmd["action"].as<String>();
+    String     reqId  = cmd["request_id"].as<String>();
+ 
+    // Avoid re-processing the same command
+    if (reqId != pendingCommandId) {
+      pendingCommandId = reqId;
+      Serial.print("[CMD] action=");
+      Serial.print(action);
+      Serial.print(" id=");
+      Serial.println(reqId);
+ 
+      if (action == "open") {
+        commandOpen();
+      } else if (action == "register") {
+        registerMode      = true;
+        registerStartedAt = millis();
+        Serial.print("[REGISTER] Mode ON for ");
+        Serial.print(registerDurationSec);
+        Serial.println("s - waiting for tag...");
+      }
+      changed = true;
+    }
   }
-
+ 
   if (changed) needsReport = true;
 }
-
+ 
 // ─────────────────────────────────────────────────────────────────────────────
 // MQTT callback
 // ─────────────────────────────────────────────────────────────────────────────
-
+ 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String topicStr(topic);
   Serial.print("[MQTT] Received: ");
   Serial.println(topicStr);
-
+ 
   StaticJsonDocument<1024> doc;
   DeserializationError err = deserializeJson(doc, payload, length);
   if (err) {
@@ -358,33 +401,22 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     Serial.println(err.c_str());
     return;
   }
-
-
-  
+ 
   if (topicStr == TOPIC_DELTA) {
     applyDelta(doc["state"].as<JsonObject>());
-
+ 
   } else if (topicStr == TOPIC_GET_ACCEPTED) {
     Serial.println("[MQTT] Full shadow received, syncing desired...");
-    applyDelta(doc["state"]["desired"].as<JsonObject>());
-
-    if (!doc["state"]["desired"].containsKey("pets") &&
-        doc["state"]["reported"].containsKey("pets")) {
-      petsDoc["pets"] = doc["state"]["reported"]["pets"];  // ← FIX: ahora lee de reported
-      Serial.println("[MQTT] Pets restored from reported.");
-    }
-    else if (doc["state"]["desired"].containsKey("pets")) {  // ← más claro
-      petsDoc["pets"] = doc["state"]["desired"]["pets"];
-      Serial.println("[MQTT] Pets loaded from desired.");
+    if (doc["state"].containsKey("desired")) {
+      applyDelta(doc["state"]["desired"].as<JsonObject>());
     }
   }
-
 }
-
+ 
 // ─────────────────────────────────────────────────────────────────────────────
 // WiFi & MQTT
 // ─────────────────────────────────────────────────────────────────────────────
-
+ 
 void setupWiFi() {
   Serial.print("[WIFI] Connecting to ");
   Serial.println(WIFI_SSID);
@@ -392,28 +424,17 @@ void setupWiFi() {
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
   Serial.print("\n[WIFI] Connected. IP: ");
   Serial.println(WiFi.localIP());
-
+ 
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   Serial.print("[NTP] Syncing");
   struct tm ti;
-  int attempts=0;
-  while(!getLocalTime(&ti)&&attempts<20){
-    delay(500);
-    Serial.print(".");
-    attempts++;
+  int attempts = 0;
+  while (!getLocalTime(&ti) && attempts < 20) {
+    delay(500); Serial.print("."); attempts++;
   }
-  if(attempts>=20){
-    Serial.println("\n [NTP]Failed -this will cause tls errors");
-  }
-  else{ Serial.println("OK");}
-
-
-  while (!getLocalTime(&ti)) { delay(500); Serial.print("."); 
-  Serial.println(" OK");
-  }
+  Serial.println(attempts < 20 ? " OK" : "\n[NTP] Failed — TLS errors likely");
 }
-
-
+ 
 void reconnect() {
   while (!mqttClient.connected()) {
     Serial.print("[MQTT] Connecting...");
@@ -431,57 +452,44 @@ void reconnect() {
     }
   }
 }
-
+ 
 // ─────────────────────────────────────────────────────────────────────────────
 // setup()
 // ─────────────────────────────────────────────────────────────────────────────
-
+ 
 void setup() {
   Serial.begin(115200);
   Serial.println("\n[SYS] Pet Door starting...");
-
+ 
   setupWiFi();
-  wifiClient.setInsecure();
+ 
   wifiClient.setCACert(AMAZON_ROOT_CA1);
   wifiClient.setCertificate(CERTIFICATE);
   wifiClient.setPrivateKey(PRIVATE_KEY);
-
-  Serial.println("[TLS] Testing raw TLS connection...");
-  if (wifiClient.connect(MQTT_BROKER, MQTT_PORT)) {
-    Serial.println("[TLS] ✓ TLS handshake SUCCESS");
-    wifiClient.stop();
-  } else {
-    Serial.print("[TLS] ✗ TLS failed, error: ");
-    char errbuf[100];
-
-    Serial.println(wifiClient.lastError(errbuf,sizeof(errbuf)));
-  }
-
+ 
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
   mqttClient.setKeepAlive(60);
   mqttClient.setSocketTimeout(30);
   mqttClient.setCallback(mqttCallback);
   mqttClient.setBufferSize(1024);
-
+ 
   SPI.begin();
-  rfid.init();
+  rfidEntry.init();
+  rfidExit.init();
   servo.init();
-
+ 
   Serial.println("[SYS] Setup complete.");
 }
-
+ 
 // ─────────────────────────────────────────────────────────────────────────────
 // loop()
 // ─────────────────────────────────────────────────────────────────────────────
-
+ 
 void loop() {
-  
-  if(WiFi.status() != WL_CONNECTED) setupWiFi();
-
-//  ─────────────────────────────────────────────────────────────
+  if (WiFi.status() != WL_CONNECTED) setupWiFi();
   if (!mqttClient.connected()) reconnect();
   mqttClient.loop();
-
+ 
   // ── Servo smooth step ──────────────────────────────────────────────────────
   bool servoArrived = servo.update();
   if (servoArrived) {
@@ -489,31 +497,34 @@ void loop() {
     Serial.println(getDoorStateStr());
     needsReport = true;
   }
-
-  // ── RFID polling ──────────────────────────────────────────────────────────
-  bool rfidChanged = rfid.update();
-
-  if (rfidChanged) {
-    if (rfid.getState() == RFID::TAG_PRESENT) {
-      String uid = rfid.getCurrentUID();
-
-      if (currentMode == "auto" && !doorIsOpen() && !doorIsMoving()) {
-        String petName = findPetByTag(uid);
-        if (petName.length() > 0 && petName!="Unknown") {
-          commandOpen();
-          publishReport(uid, petName);
-          needsReport = false;
-        } else {
-          needsReport = true; // report unknown tag_present
-        }
-      }
-
-    } else if (rfid.getState() == RFID::TAG_REMOVED) {
-      Serial.println("[RFID] Tag gone.");
+ 
+  // ── RFID polling — entry reader ───────────────────────────────────────────
+  if (rfidEntry.update()) {
+    if (rfidEntry.getState() == RFID::TAG_PRESENT) {
+      handleTagDetected(rfidEntry.getCurrentUID(), "entry");
+    } else if (rfidEntry.getState() == RFID::TAG_REMOVED) {
+      Serial.println("[RFID][entry] Tag gone.");
+    }
+  }
+ 
+  // ── RFID polling — exit reader ────────────────────────────────────────────
+  if (rfidExit.update()) {
+    if (rfidExit.getState() == RFID::TAG_PRESENT) {
+      handleTagDetected(rfidExit.getCurrentUID(), "exit");
+    } else if (rfidExit.getState() == RFID::TAG_REMOVED) {
+      Serial.println("[RFID][exit] Tag gone.");
+    }
+  }
+ 
+  // ── Register mode expiry ──────────────────────────────────────────────────
+  if (registerMode) {
+    if ((millis() - registerStartedAt) / 1000UL >= registerDurationSec) {
+      registerMode = false;
+      Serial.println("[REGISTER] Mode expired.");
       needsReport = true;
     }
   }
-
+ 
   // ── Auto-close timer ──────────────────────────────────────────────────────
   if (autoCloseArmed && doorIsOpen()) {
     if ((millis() - openedAt) / 1000UL >= openDurationSec) {
@@ -523,12 +534,9 @@ void loop() {
       commandClose();
     }
   }
-
-  // ── Pending report ─────────────────────────────────────────────────────────
+ 
+  // ── Pending report ────────────────────────────────────────────────────────
   if (needsReport && mqttClient.connected()) {
-    String petName = findPetByTag(rfid.getCurrentUID());
-    publishReport(rfid.getCurrentUID(),petName);
-
+    publishReport();  // state-only report, no new event
   }
 }
-
