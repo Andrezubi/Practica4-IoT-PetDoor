@@ -33,12 +33,11 @@ Mayo 2026
    - Cerrar puerta (SetModeClose)
    - Automatizar la puerta (SedModeAuto)
    - Cambiar temporizador de puerta (SetAutoTimer)
-   - Registrar un RFID autorizado (SetCurrentTag)
-   - Quitar un RFID registrado (RemoveCurrentTag) 
+   - Registrar un RFID autorizado (AddNewTag)
+   - Quitar un RFID registrado (RemoveTag) 
    -  Registar el ultimo Tag percibido (RegisterLastTagIntent)
     #### Comandos para recibir informacióm del sistema: 
    - Obtener estado del motor (GetMotorState) 
-   - Obtener nombre del tag si esta presente (GetIfPresentTag) 
    - Obtener el tiempo de la ultima vez que se abrió la puerta (GetLastOpenTime) 
    - Obtener el ultimo tag registrado (GetLastTag) 
    - Obtener el estado de la puerta (GetDoorState)
@@ -76,7 +75,7 @@ El sistema debe permitir que Alexa registre y mande las siguientes categorías:
 ## 2.3 Diagramas estructurales y de comportamiento
 ### 2.3.1 Diagrama de secuencia
 ![Diagrama](Imagenes/Diagrama_de_secuencia.png)
-### 2.3.2 Diagrama de secuencia
+### 2.3.2 Diagrama UML
 ![Diagrama](Imagenes/diagrama_uml.png)
 
 ### 2.4 Diseño de la skill de Alexa 
@@ -226,6 +225,71 @@ Alexa responde:
 
 [Enlace a GitHub] https://github.com/Andrezubi/Practica4-IoT-PetDoor
 
+## 3.2 Configuraciones en Alexa (Skill e Interaction Model)
+
+# Configuraciones en Alexa (Skill e Interaction Model)
+
+1. Ingresar a **Alexa Developer Console**.
+
+2. Crear una nueva Skill.
+
+3. Configurar los parámetros iniciales:
+
+   - Nombre de la Skill: `SmartPetDoor`
+   - Locale: `Spanish (US)`
+   - Tipo de experiencia: `Other`
+   - Modelo: `Custom`
+   - Hosting Service: `Provision your own`
+   - Template: `Start From Scratch`
+
+4. Definir el **nombre de invocación** de la Skill:
+
+   puerta inteligente
+
+5. Crear todos los **Intents** definidos previamente en el diseño de la Skill, junto con sus respectivos **slots** y **utterances**.
+
+   Consideraciones:
+
+   - Para valores numéricos se utilizó el slot:
+   
+     AMAZON.FOUR_DIGIT_NUMBER
+    
+   - Para entradas de texto se utilizó:
+
+     AMAZON.SearchQuery
+
+   - Se agregaron suficientes utterances para mejorar el reconocimiento de lenguaje natural.
+
+6. Ir al menú **Endpoint**.
+
+7. Copiar el **Skill ID** generado automáticamente.
+
+8. Ir a la función **AWS Lambda** que funcionará como backend.
+
+9. Agregar un **trigger de tipo Alexa Skill**.
+
+10. Pegar el **Skill ID** copiado anteriormente.
+
+11. Desde la función Lambda copiar el **ARN (Amazon Resource Name)**.
+
+12. Volver a la configuración de **Alexa Endpoint**.
+
+13. Pegar el ARN en la opción:
+
+   Default Region
+
+14. Guardar los cambios.
+
+15. Presionar:
+
+   Build Model
+
+16. Esperar a que finalice la compilación y verificar que no existan errores.
+
+## 3.3 Configuraciones en AWS (IoT Core, Rules, Lambda y DynamoDB)
+
+
+
 # 4. Pruebas y Validaciones
 
 ## 4.1 Prueba de exactitud de distancia
@@ -300,7 +364,6 @@ Resultados obtenidos:
 - No se detectaron reinicios ni desconexiones del sistema.
 - La estabilidad fue del 100% durante los 10 minutos evaluados.
 
-
 ## 4.5 Prueba de interferencia entre tarjetas
 
 Se realizó una prueba utilizando dos tarjetas RFID simultáneamente con el objetivo de determinar el comportamiento del sensor al detectar múltiples identificadores cercanos.
@@ -314,7 +377,6 @@ Resultados obtenidos:
 
 Esto demuestra que el sensor RFID-RC522 no está diseñado para manejar múltiples tarjetas simultáneamente en espacios reducidos, ya que se producen conflictos de lectura.
 
-
 ## 4.6 Pruebas de tiempo de reacción del servomotor
 
 Se realizaron pruebas para medir el tiempo requerido por el servomotor MG90S para realizar movimientos de 90°.
@@ -326,7 +388,6 @@ Se ejecutaron 10 mediciones consecutivas obteniendo los siguientes resultados:
 - Tiempo máximo registrado: **1759 ms**
 
 Los resultados muestran que el servomotor presenta un comportamiento estable y consistente en todos los movimientos realizados.
-
 
 ## 4.7 Prueba de precisión del servomotor
 
@@ -357,7 +418,6 @@ Resultados obtenidos:
 - No se observó disminución de velocidad.
 - El sistema mantuvo estabilidad mecánica durante toda la prueba.
 
-
 ## 4.9 Prueba de obstrucciones del servomotor
 
 Se realizaron pruebas colocando distintos objetos como obstrucción física al movimiento del servomotor.
@@ -379,6 +439,69 @@ Resultados obtenidos:
 
 Esto demuestra que el sistema posee una capacidad aceptable de recuperación ante pequeñas obstrucciones mecánicas.
 
+# 4.10 Prueba de velocidad de respuesta del sistema
+
+Se realizó una prueba para medir el tiempo de respuesta total del sistema desde que se ejecuta un comando mediante Alexa hasta que el servomotor realiza la acción correspondiente.
+
+Para esta prueba se enviaron múltiples comandos de apertura y cierre de puerta utilizando Alexa, registrando el tiempo requerido para que el sistema procese el comando mediante AWS IoT Core y MQTT hasta activar el servomotor.
+
+Resultados obtenidos:
+
+- Tiempo promedio de respuesta: **3.44 segundos**
+- Tiempo mínimo registrado: **2.95 segundos**
+- Tiempo máximo registrado: **4.10 segundos** 
+
+# 4.11 Prueba de flujo completo de autenticación RFID
+
+Se realizó una prueba para validar el funcionamiento completo del flujo de autenticación RFID, verificando la detección de tarjetas, el envío de información mediante MQTT, la actualización del Device Shadow, la apertura de la puerta y el almacenamiento de eventos en la base de datos.
+
+Durante la prueba se utilizaron tarjetas autorizadas y no autorizadas tanto en el sensor de entrada como en el sensor de salida.
+
+Observación importante:
+
+- Solo las tarjetas 1 y 2 se encontraban registradas dentro del sistema.
+
+Resultados obtenidos:
+
+- Detección correcta de RFID: **100%**
+- Envío correcto mediante MQTT: **100%**
+- Apertura correcta con tarjetas autorizadas: **100%**
+- Bloqueo de tarjetas no autorizadas: **100%**
+- Registro exitoso en base de datos: **100%**
+
+# 4.12 Prueba de comandos de Alexa y sincronización con AWS
+
+Se realizó una prueba para verificar el funcionamiento de los comandos enviados desde Alexa y su sincronización con AWS IoT Core, el Device Shadow, el servomotor y la base de datos.
+
+Durante las pruebas se evaluaron comandos relacionados con:
+
+- Apertura y cierre de puerta.
+- Automatización del sistema.
+- Configuración de temporizador.
+- Registro y eliminación de etiquetas RFID.
+- Consultas de estado e información del sistema.
+
+En cada comando se verificó:
+
+- Reconocimiento correcto por Alexa.
+- Actualización del Device Shadow.
+- Movimiento del servomotor.
+- Registro de información en la base de datos.
+
+Resultados observados durante las pruebas:
+
+- Los comandos **AbrirPuerta** y **CerrarPuerta** lograron modificar correctamente el Device Shadow y activar el movimiento del servomotor.
+- Los comandos **AutomatizarPuerta**, **CambiarTemporizador** e **IniciarRegistroRFID** lograron modificar el Device Shadow, pero no ejecutaron movimientos físicos ni almacenaron información en la base de datos.
+- Los comandos **QuitarUnRFID** y **RegistrarUltimoRFID** lograron modificar el Device Shadow y almacenar información correctamente en la base de datos.
+- Los comandos de consulta como **ObtenerEstadoPuerta**, **ObtenerEstadoMotor**, **ObtenerUltimaAperturaPuerta** y **ObtenerUltimoTag** fueron reconocidos por Alexa, pero no lograron modificar el Device Shadow, mover el motor ni generar registros.
+- El comando **ConfirmarRegistroTag** logró almacenar correctamente información en la base de datos, aunque no produjo cambios físicos en el sistema.
+
+Resultados obtenidos:
+
+- Reconocimiento correcto de comandos por Alexa: **100%**
+- Actualización correcta del Device Shadow: **75%**
+- Movimiento correcto del servomotor: **16.7%**
+- Registro exitoso en base de datos: **25%**
 
 # 5. Resultados
 
@@ -396,7 +519,6 @@ Se verificó el correcto funcionamiento de:
 
 El sistema respondió correctamente a los comandos de apertura, cierre y automatización de la "puerta", demostrando una integración funcional entre hardware, nube y asistentes virtuales.
 
-
 ## 5.2 Resultados de exactitud de distancia
 
 Los resultados muestran que el sensor RFID-RC522 posee una distancia de lectura efectiva promedio de aproximadamente **3.68 cm**, manteniendo un comportamiento estable en la mayoría de pruebas realizadas.
@@ -405,7 +527,6 @@ La mayoría de mediciones se concentraron entre **3.3 cm y 3.7 cm**, lo que evid
 
 Esto cumple correctamente con el requerimiento funcional relacionado con la lectura de tarjetas RFID.
 
-
 ## 5.3 Resultados de interferencia según materiales
 
 Las pruebas realizadas demostraron que los materiales no metálicos afectan mínimamente el funcionamiento del sensor RFID.
@@ -413,7 +534,6 @@ Las pruebas realizadas demostraron que los materiales no metálicos afectan mín
 Materiales como cartón, tela y plástico mantuvieron una tasa de detección del 100%, mientras que el aluminio bloqueó completamente la comunicación RFID debido a sus propiedades conductoras.
 
 Esto permitió identificar las limitaciones físicas del sistema y definir recomendaciones para futuras instalaciones.
-
 
 ## 5.4 Resultados de tiempo de respuesta del sensor
 
@@ -463,6 +583,38 @@ Los materiales más rígidos consiguieron detener temporalmente el motor, mientr
 
 Esto demuestra una adecuada capacidad de recuperación del sistema ante pequeñas interferencias físicas.
 
+# 5.11 Resultados de prueba de velocidad de respuesta
+
+Los resultados obtenidos muestran que el sistema mantiene tiempos de respuesta estables y adecuados para aplicaciones IoT en tiempo real.
+
+El sistema presentó un tiempo promedio de respuesta de **3.44 segundos**, manteniéndose dentro del límite establecido de 5 segundos definido en los requerimientos no funcionales.
+
+La mayoría de respuestas se mantuvieron entre **3 y 4 segundos**, demostrando estabilidad en la comunicación entre Alexa, AWS IoT Core, MQTT y el ESP32.
+
+# 5.12 Resultados de flujo completo de autenticación RFID
+
+Las pruebas demostraron que el sistema diferencia correctamente entre tarjetas autorizadas y no autorizadas.
+
+Las tarjetas registradas lograron:
+
+- Actualizar correctamente el Device Shadow.
+- Activar la apertura de la puerta.
+- Registrar eventos en la base de datos.
+
+Por otro lado, las tarjetas no registradas fueron detectadas por el sistema, pero no lograron abrir la puerta ni modificar el estado del sistema, garantizando un control de acceso seguro.
+
+# 5.13 Resultados de comandos de Alexa y sincronización con AWS
+
+Los resultados muestran que el sistema logró integrar correctamente Alexa con AWS IoT Core para el control remoto de la puerta y la gestión de tarjetas RFID.
+
+Las pruebas evidenciaron que los comandos principales de control físico, como apertura y cierre de puerta, funcionaron correctamente tanto a nivel de software como de hardware, logrando sincronizar el Device Shadow y activar el servomotor.
+
+Asimismo, los comandos relacionados con la gestión de RFID demostraron que el sistema puede almacenar y modificar información en la base de datos correctamente.
+
+Sin embargo, los comandos orientados a consultas de estado todavía presentan limitaciones, ya que no generan respuestas completas ni actualizaciones visibles dentro del sistema, indicando funcionalidades pendientes de implementación.
+
+A pesar de ello, Alexa logró reconocer correctamente todos los comandos enviados durante las pruebas, demostrando estabilidad en el reconocimiento de voz y en la comunicación con AWS IoT Core mediante MQTT.
+
 # 6. Conclusiones
 
 1. El sistema logró integrar exitosamente el sensor RFID-RC522, el servomotor MG90S, AWS IoT Core, MQTT y Alexa, permitiendo controlar la apertura y cierre de la puerta tanto de manera automática como mediante comandos de voz. Esto demuestra el correcto funcionamiento de la arquitectura IoT implementada.
@@ -475,7 +627,11 @@ Esto demuestra una adecuada capacidad de recuperación del sistema ante pequeña
 
 5. El servomotor MG90S mostró un comportamiento estable y preciso, obteniendo un tiempo promedio de **1754.6 ms** para movimientos de 90°, además de mantener funcionamiento continuo durante varios minutos sin sobrecalentamiento ni pérdida de velocidad, confirmando su confiabilidad para aplicaciones automatizadas.
 
----
+6. La integración entre Alexa, AWS IoT Core, MQTT y el ESP32 permitió obtener tiempos de respuesta eficientes y consistentes. El sistema logró ejecutar acciones físicas en el servomotor en un promedio de **3.44 segundos**, cumpliendo satisfactoriamente el requerimiento no funcional de mantener una latencia menor a 5 segundos.
+
+7. El sistema logró validar correctamente las tarjetas RFID autorizadas y bloquear aquellas que no se encontraban registradas. Además, el flujo completo de comunicación entre sensores, MQTT, AWS IoT Core y la base de datos funcionó correctamente durante todas las pruebas realizadas.
+
+8. El sistema logró integrar exitosamente Alexa con AWS IoT Core para el control remoto de la puerta y la gestión de tarjetas RFID. Los comandos principales de apertura y cierre funcionaron correctamente, mientras que algunos comandos informativos y de automatización todavía requieren mejoras para ampliar las funcionalidades del sistema.
 
 # 7. Recomendaciones
 
