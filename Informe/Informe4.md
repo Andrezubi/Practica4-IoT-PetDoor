@@ -174,31 +174,6 @@ Alexa responde:
 
 "Oliver fue registrado correctamente."
 ```
-##### Registro de una mascota
-
-```text
-Usuario
-    ↓
-"Registra a Oliver "
-
-Alexa Skill
-    ↓
-AddNewTagIntent
-    ↓
-AWS Lambda activa modo registro
-    ↓
-Actualización del Device Shadow
-    ↓
-ESP32 entra en modo registro
-    ↓
-RFID detecta etiqueta
-    ↓
-Información almacenada en DynamoDB
-    ↓
-Alexa responde:
-
-"Oliver fue registrado correctamente."
-```
 ### 2.5 Diseño de reportes (mockups) con información relevante para la toma de decisiones
 
 #### 1. Tráfico de uso de la puerta por día de la semana y hora del día
@@ -217,6 +192,15 @@ Alexa responde:
 ![Diagrama](Imagenes/mockup_5.png)
 
 ### 2.6 Diseño Modelo de Datos 
+
+- La tabla `devices` almacena todas las puertas inteligentes asociadas a un usuario.
+
+- La tabla `pets` almacena las mascotas registradas para cada puerta inteligente, incluyendo el nombre de la mascota y el identificador RFID asociado.
+
+- La tabla `events` almacena cada evento generado cuando una etiqueta RFID es detectada por alguno de los sensores, registrando información como el lector utilizado, el identificador RFID, la fecha y hora del evento, y la acción tomada por el sistema.
+
+- La tabla `commands` almacena el historial de comandos enviados a la puerta inteligente, incluyendo comandos de apertura, cierre, registro de etiquetas, cambios de configuración y otras acciones ejecutadas por el sistema o mediante Alexa. 
+
 ![Diagrama](Imagenes/diseño_modelo_datos.png)
 
 # 3. Implementación
@@ -226,8 +210,6 @@ Alexa responde:
 [Enlace a GitHub] https://github.com/Andrezubi/Practica4-IoT-PetDoor
 
 ## 3.2 Configuraciones en Alexa (Skill e Interaction Model)
-
-# Configuraciones en Alexa (Skill e Interaction Model)
 
 1. Ingresar a **Alexa Developer Console**.
 
@@ -286,13 +268,9 @@ Alexa responde:
 
 16. Esperar a que finalice la compilación y verificar que no existan errores.
 
-## 3.3 Configuraciones en AWS (IoT Core, Rules, Lambda y DynamoDB)
+## 3.3 Configuraciones en AWS (IoT Core, Rules y Lambda )
 
-## 3.3 Configuraciones en AWS (IoT Core, Rules, Lambda y DynamoDB)
-
-### Configuraciones en AWS IoT Core
-
-#### Configuración del Thing
+## Configuración del Thing
 
 - Ingresar a **AWS Console**
 - Entrar a **IoT Core**
@@ -413,130 +391,7 @@ const char PRIVATE_KEY[] PROGMEM = R"KEY(
 
 Estos certificados permiten implementar autenticación mediante TLS y asegurar la comunicación MQTT entre el dispositivo y AWS IoT Core.
 
-## 3.3 Configuraciones en AWS (IoT Core, Rules, Lambda y DynamoDB)
 
-### Configuraciones en AWS IoT Core
-
-#### Configuración del Thing
-
-- Ingresar a **AWS Console**
-- Entrar a **AWS IoT Core**
-- Ir al menú **Devices**
-- Seleccionar **Things**
-- Presionar **Create Things**
-- Escoger **Create single thing**
-- Definir el nombre del Thing:
-
-```text
-Thing Name: pet_door_esp32
-```
-
-- En **Device Shadow** seleccionar:
-
-```text
-Classic Shadow
-```
-
-- Definir el Shadow inicial con la siguiente estructura:
-
-```json
-{
-  "state": {
-    "desired": {
-      "config": {
-        "mode": "auto",
-        "open_duration_sec": 15,
-        "register_duration_sec": 20
-      },
-      "door_command": {
-        "action": "open",
-        "request_id": "cmd-6cb7f4e2"
-      }
-    },
-    "reported": {
-      "config": {
-        "mode": "auto",
-        "open_duration_sec": 15,
-        "register_duration_sec": 20
-      },
-      "door": {
-        "state": "closed",
-        "motor_state": "idle",
-        "last_opened_at": "2026-05-12T01:15:40Z",
-        "last_command_id": "cmd-184"
-      },
-      "last_event": {
-        "reader": "exit",
-        "tag": "24:9F:2A:57",
-        "detected_at": "2026-05-24T19:37:05Z",
-        "event_id": "5d53afa2-c109-49d1-9a2c-e4d787ae70d8"
-      }
-    }
-  }
-}
-```
-
-- Escoger:
-
-```text
-Auto-generate a new certificate
-```
-
----
-
-### Configuración de Policies
-
-- Ir a **Policies**
-- Presionar **Create Policy**
-- Definir:
-
-```text
-Policy Name: pet_door_esp32_Policy
-```
-
-- Agregar las siguientes reglas:
-
-| Policy Effect | Policy Action | Policy Resource |
-|---------------|---------------|-----------------|
-| Allow | iot:Publish | * |
-| Allow | iot:Subscribe | * |
-| Allow | iot:Connect | * |
-| Allow | iot:Receive | * |
-
-- Seleccionar la Policy creada previamente
-- Presionar **Create Thing**
-
----
-
-### Descarga de certificados
-
-Una vez creado el Thing, AWS generará automáticamente los certificados necesarios para establecer comunicación segura mediante MQTT y TLS.
-
-Descargar los siguientes archivos:
-
-```text
-Amazon Root CA 1
-Private Key File
-Device Certificate
-```
-
-Copiar posteriormente el contenido de los certificados dentro del código principal del ESP32:
-
-```cpp
-const char AMAZON_ROOT_CA1[] PROGMEM = R"EOF(
-...
-)EOF";
-
-const char CERTIFICATE[] PROGMEM = R"KEY(
-...
-)KEY";
-
-const char PRIVATE_KEY[] PROGMEM = R"KEY(
-...
-)KEY";
-```
-
----
 
 ## Configuración de funciones Lambda
 
@@ -721,7 +576,6 @@ petdoor_iot_rule_logic
 ```text
 Create Rule
 ```
-
 
 # 4. Pruebas y Validaciones
 
@@ -924,17 +778,10 @@ En cada comando se verificó:
 Resultados observados durante las pruebas:
 
 - Los comandos **AbrirPuerta** y **CerrarPuerta** lograron modificar correctamente el Device Shadow y activar el movimiento del servomotor.
-- Los comandos **AutomatizarPuerta**, **CambiarTemporizador** e **IniciarRegistroRFID** lograron modificar el Device Shadow, pero no ejecutaron movimientos físicos ni almacenaron información en la base de datos.
+- Los comandos **AutomatizarPuerta**, **CambiarTemporizador** e **IniciarRegistroRFID** lograron modificar el Device Shadow.
 - Los comandos **QuitarUnRFID** y **RegistrarUltimoRFID** lograron modificar el Device Shadow y almacenar información correctamente en la base de datos.
-- Los comandos de consulta como **ObtenerEstadoPuerta**, **ObtenerEstadoMotor**, **ObtenerUltimaAperturaPuerta** y **ObtenerUltimoTag** fueron reconocidos por Alexa, pero no lograron modificar el Device Shadow, mover el motor ni generar registros.
-- El comando **ConfirmarRegistroTag** logró almacenar correctamente información en la base de datos, aunque no produjo cambios físicos en el sistema.
-
-Resultados obtenidos:
-
-- Reconocimiento correcto de comandos por Alexa: **100%**
-- Actualización correcta del Device Shadow: **75%**
-- Movimiento correcto del servomotor: **16.7%**
-- Registro exitoso en base de datos: **25%**
+- Los comandos de consulta como **ObtenerEstadoPuerta**, **ObtenerEstadoMotor**, **ObtenerUltimaAperturaPuerta** y **ObtenerUltimoTag** fueron reconocidos por Alexa.
+- El comando **ConfirmarRegistroTag** logró almacenar correctamente información en la base de datos.
 
 # 5. Resultados
 
@@ -1044,9 +891,7 @@ Las pruebas evidenciaron que los comandos principales de control físico, como a
 
 Asimismo, los comandos relacionados con la gestión de RFID demostraron que el sistema puede almacenar y modificar información en la base de datos correctamente.
 
-Sin embargo, los comandos orientados a consultas de estado todavía presentan limitaciones, ya que no generan respuestas completas ni actualizaciones visibles dentro del sistema, indicando funcionalidades pendientes de implementación.
-
-A pesar de ello, Alexa logró reconocer correctamente todos los comandos enviados durante las pruebas, demostrando estabilidad en el reconocimiento de voz y en la comunicación con AWS IoT Core mediante MQTT.
+Alexa logró reconocer correctamente todos los comandos enviados durante las pruebas, demostrando estabilidad en la comunicación con AWS IoT Core mediante MQTT.
 
 # 6. Conclusiones
 
@@ -1077,6 +922,10 @@ A pesar de ello, Alexa logró reconocer correctamente todos los comandos enviado
 4. Añadir sensores complementarios, como sensores ultrasónicos o infrarrojos, para mejorar la automatización del sistema y aumentar la seguridad en la detección de presencia o movimiento cerca de la puerta.
 
 5. Realizar pruebas de funcionamiento continuo durante periodos más prolongados y bajo distintas condiciones ambientales, con el fin de evaluar el comportamiento del sistema frente a variaciones de temperatura, humedad y uso intensivo a largo plazo.
+
+6. Optimizar la estructura de la base de datos en DynamoDB eliminando el almacenamiento simultáneo de `thing_name` y `device_id`, debido a que ambos representan la misma entidad y generan redundancia innecesaria en la información almacenada.
+
+7. Mejorar la función Lambda asociada a la lógica del IoT Rule para que pueda detectar cuando un comando enviado ha sido completado exitosamente y actualizar su estado correspondiente, evitando que los registros permanezcan indefinidamente con estado `"sent"`.
 
 # 8. Anexos 
 
