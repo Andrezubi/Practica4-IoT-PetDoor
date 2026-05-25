@@ -288,6 +288,439 @@ Alexa responde:
 
 ## 3.3 Configuraciones en AWS (IoT Core, Rules, Lambda y DynamoDB)
 
+## 3.3 Configuraciones en AWS (IoT Core, Rules, Lambda y DynamoDB)
+
+### Configuraciones en AWS IoT Core
+
+#### Configuración del Thing
+
+- Ingresar a **AWS Console**
+- Entrar a **IoT Core**
+- Ir al menú **Devices**
+- Seleccionar **Things**
+- Presionar **Create Things**
+- Escoger **Create single thing**
+- Definir el nombre del Thing:
+
+```text
+Thing Name: pet_door_esp32
+```
+
+- En **Device Shadow** escoger:
+
+```text
+Classic Shadow
+```
+
+- Definir un Shadow inicial con la siguiente estructura:
+
+```json
+{
+  "state": {
+    "desired": {
+      "config": {
+        "mode": "auto",
+        "open_duration_sec": 15,
+        "register_duration_sec": 20
+      },
+      "door_command": {
+        "action": "open",
+        "request_id": "cmd-6cb7f4e2"
+      }
+    },
+    "reported": {
+      "config": {
+        "mode": "auto",
+        "open_duration_sec": 15,
+        "register_duration_sec": 20
+      },
+      "door": {
+        "state": "closed",
+        "motor_state": "idle",
+        "last_opened_at": "2026-05-12T01:15:40Z",
+        "last_command_id": "cmd-184"
+      },
+      "last_event": {
+        "reader": "exit",
+        "tag": "24:9F:2A:57",
+        "detected_at": "2026-05-24T19:37:05Z",
+        "event_id": "5d53afa2-c109-49d1-9a2c-e4d787ae70d8"
+      }
+    }
+  }
+}
+```
+
+- Escoger:
+
+```text
+Auto-generate a new certificate
+```
+
+---
+
+### Configuración de Policy
+
+- Ir a **Policies**
+- Presionar **Create Policy**
+- Definir:
+
+```text
+Policy Name: pet_door_esp32_Policy
+```
+
+- Crear las siguientes reglas:
+
+| Policy Effect | Policy Action | Policy Resource |
+|---------------|---------------|-----------------|
+| Allow | iot:Publish | * |
+| Allow | iot:Subscribe | * |
+| Allow | iot:Connect | * |
+| Allow | iot:Receive | * |
+
+- Seleccionar la Policy creada previamente
+- Presionar **Create Thing**
+
+---
+
+### Descarga de certificados
+
+Una vez creado el Thing, AWS permitirá descargar automáticamente los certificados necesarios para establecer una comunicación segura entre el ESP32 y AWS IoT Core.
+
+Descargar los siguientes archivos:
+
+```text
+Amazon Root CA 1
+Private Key File
+Device Certificate
+```
+
+Posteriormente se debe copiar el contenido de los certificados dentro del código principal del ESP32 en las variables correspondientes:
+
+```cpp
+const char AMAZON_ROOT_CA1[] PROGMEM = R"EOF(
+...
+)EOF";
+
+const char CERTIFICATE[] PROGMEM = R"KEY(
+...
+)KEY";
+
+const char PRIVATE_KEY[] PROGMEM = R"KEY(
+...
+)KEY";
+```
+
+Estos certificados permiten implementar autenticación mediante TLS y asegurar la comunicación MQTT entre el dispositivo y AWS IoT Core.
+
+## 3.3 Configuraciones en AWS (IoT Core, Rules, Lambda y DynamoDB)
+
+### Configuraciones en AWS IoT Core
+
+#### Configuración del Thing
+
+- Ingresar a **AWS Console**
+- Entrar a **AWS IoT Core**
+- Ir al menú **Devices**
+- Seleccionar **Things**
+- Presionar **Create Things**
+- Escoger **Create single thing**
+- Definir el nombre del Thing:
+
+```text
+Thing Name: pet_door_esp32
+```
+
+- En **Device Shadow** seleccionar:
+
+```text
+Classic Shadow
+```
+
+- Definir el Shadow inicial con la siguiente estructura:
+
+```json
+{
+  "state": {
+    "desired": {
+      "config": {
+        "mode": "auto",
+        "open_duration_sec": 15,
+        "register_duration_sec": 20
+      },
+      "door_command": {
+        "action": "open",
+        "request_id": "cmd-6cb7f4e2"
+      }
+    },
+    "reported": {
+      "config": {
+        "mode": "auto",
+        "open_duration_sec": 15,
+        "register_duration_sec": 20
+      },
+      "door": {
+        "state": "closed",
+        "motor_state": "idle",
+        "last_opened_at": "2026-05-12T01:15:40Z",
+        "last_command_id": "cmd-184"
+      },
+      "last_event": {
+        "reader": "exit",
+        "tag": "24:9F:2A:57",
+        "detected_at": "2026-05-24T19:37:05Z",
+        "event_id": "5d53afa2-c109-49d1-9a2c-e4d787ae70d8"
+      }
+    }
+  }
+}
+```
+
+- Escoger:
+
+```text
+Auto-generate a new certificate
+```
+
+---
+
+### Configuración de Policies
+
+- Ir a **Policies**
+- Presionar **Create Policy**
+- Definir:
+
+```text
+Policy Name: pet_door_esp32_Policy
+```
+
+- Agregar las siguientes reglas:
+
+| Policy Effect | Policy Action | Policy Resource |
+|---------------|---------------|-----------------|
+| Allow | iot:Publish | * |
+| Allow | iot:Subscribe | * |
+| Allow | iot:Connect | * |
+| Allow | iot:Receive | * |
+
+- Seleccionar la Policy creada previamente
+- Presionar **Create Thing**
+
+---
+
+### Descarga de certificados
+
+Una vez creado el Thing, AWS generará automáticamente los certificados necesarios para establecer comunicación segura mediante MQTT y TLS.
+
+Descargar los siguientes archivos:
+
+```text
+Amazon Root CA 1
+Private Key File
+Device Certificate
+```
+
+Copiar posteriormente el contenido de los certificados dentro del código principal del ESP32:
+
+```cpp
+const char AMAZON_ROOT_CA1[] PROGMEM = R"EOF(
+...
+)EOF";
+
+const char CERTIFICATE[] PROGMEM = R"KEY(
+...
+)KEY";
+
+const char PRIVATE_KEY[] PROGMEM = R"KEY(
+...
+)KEY";
+```
+
+---
+
+## Configuración de funciones Lambda
+
+Las siguientes configuraciones deben realizarse para ambas funciones Lambda:
+
+- Backend de Alexa
+- Lógica de procesamiento de eventos del Rule
+
+### Creación de la función
+
+- Ir a **AWS Lambda**
+- Presionar **Create Function**
+- Definir:
+
+```text
+Runtime: Python 3.14
+```
+
+- Definir el nombre correspondiente:
+
+```text
+petdoor_alexa_backend
+petdoor_iot_rule_logic
+```
+
+- Presionar **Create Function**
+
+- Subir el código fuente correspondiente.
+
+Para la función Lambda del backend de Alexa también debe cargarse el paquete comprimido de despliegue:
+
+```text
+deployment.zip
+```
+
+(Archivo presente dentro del repositorio del proyecto).
+
+---
+
+### Configuración de Trigger
+
+Presionar **Add Trigger**
+
+Seleccionar el tipo de origen correspondiente.
+
+#### Trigger para Lambda de lógica IoT
+
+Seleccionar:
+
+```text
+Source: AWS IoT
+```
+
+Configurar:
+
+```text
+Rule Type: Custom IoT Rule
+Existing Rule: [Regla creada previamente]
+```
+
+Presionar:
+
+```text
+Add
+```
+
+---
+
+#### Trigger para Lambda del backend Alexa
+
+Seleccionar:
+
+```text
+Source: Alexa
+```
+
+Configurar:
+
+```text
+Skill ID Verification: Enable
+Skill ID: [ID de la Skill]
+```
+
+Presionar:
+
+```text
+Add
+```
+
+---
+
+### Configuración de permisos IAM
+
+- Ir a **AWS IAM**
+- Entrar al menú **Roles**
+- Seleccionar el rol generado automáticamente para la función Lambda
+- Presionar **Add permissions**
+- Seleccionar **Attach Policies**
+
+Agregar las siguientes políticas:
+
+| Política |
+|-----------|
+| AmazonDynamoDBFullAccess |
+| AWSIoTFullAccess |
+
+Presionar:
+
+```text
+Add permissions
+```
+
+- Volver a Lambda
+- Presionar:
+
+```text
+Deploy
+```
+
+---
+
+## Configuración de IoT Rule
+
+- Entrar a **AWS IoT Core**
+- Ir al menú **Message Routing**
+- Seleccionar **Rules**
+- Presionar **Create Rule**
+
+Definir:
+
+```text
+Rule Name: petdoor_event_rule
+```
+
+Definir el SQL Statement:
+
+```sql
+SELECT
+    topic(3) AS thing_name,
+
+    current.state.reported.last_event.event_id AS event_id,
+
+    current.state.reported.last_event.reader AS reader,
+
+    current.state.reported.last_event.tag AS tag,
+
+    current.state.reported.last_event.detected_at AS detected_at,
+
+    current.state.reported.config.mode AS mode,
+
+    current.state.reported.door.state AS door_state,
+
+    timestamp() AS aws_timestamp
+
+FROM '$aws/things/+/shadow/update/documents'
+
+WHERE
+    startswith(topic(3), 'pet_door')
+    AND current.state.reported.last_event.event_id <>
+        previous.state.reported.last_event.event_id
+```
+
+---
+
+### Configuración del Rule Action
+
+- Presionar **Add Rule Action**
+- Seleccionar:
+
+```text
+Action Type: Lambda
+```
+
+- Escoger la función Lambda creada previamente
+
+```text
+petdoor_iot_rule_logic
+```
+
+- Presionar:
+
+```text
+Create Rule
+```
 
 
 # 4. Pruebas y Validaciones
