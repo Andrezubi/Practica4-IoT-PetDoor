@@ -927,6 +927,8 @@ Alexa logró reconocer correctamente todos los comandos enviados durante las pru
 
 7. Mejorar la función Lambda asociada a la lógica del IoT Rule para que pueda detectar cuando un comando enviado ha sido completado exitosamente y actualizar su estado correspondiente, evitando que los registros permanezcan indefinidamente con estado `"sent"`.
 
+8. En algunos registros a la base de datos se guarda en esta utilizando un tiempo distinto al de bolivia, pero la placa obtiene la hora de bolivia entonces se tiene que arreglar esas discrepancias
+
 # 8. Anexos 
 
 [Enlace a la planilla de pruebas](https://docs.google.com/spreadsheets/d/1vf-1s-AhRqPHOushzfqOPbe9ObheVhk6w0d8jkjzZqQ/edit?gid=0#gid=0) 
